@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "runsentry"
+version = "0.0.1.dev0"
+description = "A lightweight local health observer for long-running commands and Python jobs."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+  {name = "RunSentry contributors"}
+]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: System :: Monitoring",
+  "Topic :: Utilities"
+]
+dependencies = [
+  "psutil>=5.9"
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest>=7"
+]
+
+[project.scripts]
+runsentry = "runsentry.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
