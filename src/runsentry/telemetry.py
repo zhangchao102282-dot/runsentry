@@ -9,6 +9,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .health import (
+    HealthAssessment,
+    HealthTransition,
+    serialize_assessment,
+    serialize_transition_history,
+)
 from .observation import ProcessIdentity, ProcessObservation, ResourceSnapshot
 from .output import StreamActivitySnapshot
 from .watch import DiskUsageSnapshot, WatchedPathObservation
@@ -109,6 +115,7 @@ class TelemetryWriter:
         stdout_activity: StreamActivitySnapshot,
         stderr_activity: StreamActivitySnapshot,
         watched_paths: tuple[WatchedPathObservation, ...],
+        health_assessment: HealthAssessment,
     ) -> None:
         self.sample_count += 1
         self._update_peaks(resource_snapshot)
@@ -119,6 +126,8 @@ class TelemetryWriter:
                 "stdout": serialize_stream_activity(stdout_activity),
                 "stderr": serialize_stream_activity(stderr_activity),
                 "watched_paths": serialize_watched_paths(watched_paths),
+                "health_state": health_assessment.state.value,
+                "reason_codes": list(health_assessment.reason_codes),
             }
         )
 
@@ -134,6 +143,8 @@ class TelemetryWriter:
         stdout_activity: StreamActivitySnapshot,
         stderr_activity: StreamActivitySnapshot,
         watched_paths: tuple[WatchedPathObservation, ...],
+        health_assessment: HealthAssessment,
+        health_transitions: tuple[HealthTransition, ...],
     ) -> None:
         self._update_peaks(resource_snapshot)
         end_timestamp_epoch_s = _now_epoch_s()
@@ -150,6 +161,12 @@ class TelemetryWriter:
             "process": serialize_resource_snapshot(resource_snapshot),
             "watched_paths": serialize_watched_paths(watched_paths),
             "peaks": self._peaks_dict(),
+            "health_state": health_assessment.state.value,
+            "reason_codes": list(health_assessment.reason_codes),
+            "health": serialize_assessment(health_assessment),
+            "health_transition_history": serialize_transition_history(
+                health_transitions
+            ),
         }
         self.write_event(finished, flush=True)
         self.write_summary(
@@ -163,6 +180,8 @@ class TelemetryWriter:
             stdout_activity=stdout_activity,
             stderr_activity=stderr_activity,
             watched_paths=watched_paths,
+            health_assessment=health_assessment,
+            health_transitions=health_transitions,
         )
 
     def write_summary(
@@ -178,6 +197,8 @@ class TelemetryWriter:
         stdout_activity: StreamActivitySnapshot,
         stderr_activity: StreamActivitySnapshot,
         watched_paths: tuple[WatchedPathObservation, ...],
+        health_assessment: HealthAssessment,
+        health_transitions: tuple[HealthTransition, ...],
     ) -> None:
         summary = {
             "schema_version": SCHEMA_VERSION,
@@ -196,9 +217,14 @@ class TelemetryWriter:
             "stderr": serialize_stream_activity(stderr_activity),
             **self._peaks_dict(),
             "final_watched_paths": serialize_watched_paths(watched_paths),
+            "final_health_state": health_assessment.state.value,
+            "final_reason_codes": list(health_assessment.reason_codes),
+            "health_terminal": health_assessment.terminal,
+            "health_transition_history": serialize_transition_history(
+                health_transitions
+            ),
             "telemetry_file_path": str(self.paths.telemetry_path),
             "consciously_absent_fields": [
-                "health_state",
                 "stall_status",
                 "oom_risk",
                 "disk_exhaustion_eta",

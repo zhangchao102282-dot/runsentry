@@ -8,6 +8,7 @@ import sys
 import time
 from dataclasses import dataclass
 
+from .health import HealthAssessment, HealthStateMachine, HealthTransition
 from .observation import (
     DEFAULT_RESOURCE_SAMPLE_INTERVAL_S,
     ProcessResourceObserver,
@@ -67,6 +68,8 @@ class ExecutionResult:
     run_id: str
     telemetry_path: str
     summary_path: str
+    final_health: HealthAssessment
+    health_transitions: tuple[HealthTransition, ...]
 
 
 @dataclass(frozen=True)
@@ -78,6 +81,7 @@ class _RunningProcess:
     observer: ProcessResourceObserver
     path_observer: PathObserver
     telemetry: TelemetryWriter
+    health: HealthStateMachine
 
 
 @dataclass
@@ -183,9 +187,16 @@ def launch_process(run_spec: RunSpec, telemetry: TelemetryWriter) -> _RunningPro
         root_create_time_epoch_s=info.root_create_time_epoch_s,
     )
     path_observer = PathObserver(run_spec.watch_paths or [])
+    health = HealthStateMachine()
     output_pump.start()
     resource_snapshot = observer.sample()
     watched_paths = path_observer.sample()
+    health_assessment = health.assess_sample(
+        resource_snapshot=resource_snapshot,
+        stdout_activity=output_pump.stdout_snapshot(),
+        stderr_activity=output_pump.stderr_snapshot(),
+        watched_paths=watched_paths,
+    )
     telemetry.write_run_started(
         name=run_spec.name,
         argv=run_spec.argv,
@@ -199,6 +210,7 @@ def launch_process(run_spec: RunSpec, telemetry: TelemetryWriter) -> _RunningPro
         stdout_activity=output_pump.stdout_snapshot(),
         stderr_activity=output_pump.stderr_snapshot(),
         watched_paths=watched_paths,
+        health_assessment=health_assessment,
     )
     return _RunningProcess(
         run_spec=run_spec,
@@ -208,6 +220,7 @@ def launch_process(run_spec: RunSpec, telemetry: TelemetryWriter) -> _RunningPro
         observer=observer,
         path_observer=path_observer,
         telemetry=telemetry,
+        health=health,
     )
 
 
@@ -228,6 +241,7 @@ def execute_command(run_spec: RunSpec) -> ExecutionResult:
             running.path_observer,
             running.output_pump,
             running.telemetry,
+            running.health,
             signal_state,
             sample_interval_s=running.run_spec.sample_interval_s,
         )
@@ -247,6 +261,11 @@ def _finish_execution(running: _RunningProcess, exit_code: int) -> ExecutionResu
     _report_output_failures(running.output_pump)
     stdout_activity = running.output_pump.stdout_snapshot()
     stderr_activity = running.output_pump.stderr_snapshot()
+    final_health = running.health.assess_finished(
+        exit_code=exit_code,
+        elapsed_s=latest_snapshot.elapsed_s,
+        alive_known_process_count=latest_snapshot.current_alive_known_process_count,
+    )
     running.telemetry.write_run_finished(
         name=running.info.name,
         argv=running.info.argv,
@@ -257,6 +276,8 @@ def _finish_execution(running: _RunningProcess, exit_code: int) -> ExecutionResu
         stdout_activity=stdout_activity,
         stderr_activity=stderr_activity,
         watched_paths=latest_watched_paths,
+        health_assessment=final_health,
+        health_transitions=running.health.transition_history(),
     )
     return ExecutionResult(
         exit_code=exit_code,
@@ -276,6 +297,8 @@ def _finish_execution(running: _RunningProcess, exit_code: int) -> ExecutionResu
         run_id=running.telemetry.run_id,
         telemetry_path=str(running.telemetry.paths.telemetry_path),
         summary_path=str(running.telemetry.paths.summary_path),
+        final_health=final_health,
+        health_transitions=running.health.transition_history(),
     )
 
 
@@ -285,6 +308,7 @@ def wait_for_process(
     path_observer: PathObserver,
     output_pump: OutputPump,
     telemetry: TelemetryWriter,
+    health: HealthStateMachine,
     signal_state: _SignalState,
     sample_interval_s: float = DEFAULT_RESOURCE_SAMPLE_INTERVAL_S,
 ) -> int:
@@ -314,11 +338,22 @@ def wait_for_process(
             return _return_code_to_exit_code(returncode)
         except subprocess.TimeoutExpired:
             if time.monotonic() >= next_sample_monotonic_s:
+                resource_snapshot = observer.sample()
+                watched_paths = path_observer.sample()
+                stdout_activity = output_pump.stdout_snapshot()
+                stderr_activity = output_pump.stderr_snapshot()
+                health_assessment = health.assess_sample(
+                    resource_snapshot=resource_snapshot,
+                    stdout_activity=stdout_activity,
+                    stderr_activity=stderr_activity,
+                    watched_paths=watched_paths,
+                )
                 telemetry.write_sample(
-                    resource_snapshot=observer.sample(),
-                    stdout_activity=output_pump.stdout_snapshot(),
-                    stderr_activity=output_pump.stderr_snapshot(),
-                    watched_paths=path_observer.sample(),
+                    resource_snapshot=resource_snapshot,
+                    stdout_activity=stdout_activity,
+                    stderr_activity=stderr_activity,
+                    watched_paths=watched_paths,
+                    health_assessment=health_assessment,
                 )
                 next_sample_monotonic_s = time.monotonic() + sample_interval_s
 

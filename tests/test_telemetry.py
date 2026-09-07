@@ -103,7 +103,8 @@ def test_summary_contains_expected_factual_fields(tmp_path) -> None:
     assert summary["sample_count"] >= 1
     assert summary["stderr"]["total_bytes"] == 3
     assert summary["telemetry_file_path"] == result.telemetry_path
-    assert "health_state" in summary["consciously_absent_fields"]
+    assert "final_health_state" in summary
+    assert "health_transition_history" in summary
     assert "stall_status" in summary["consciously_absent_fields"]
     assert "oom_risk" in summary["consciously_absent_fields"]
     assert "disk_exhaustion_eta" in summary["consciously_absent_fields"]
