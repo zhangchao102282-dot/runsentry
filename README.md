@@ -1,42 +1,150 @@
 # RunSentry
 
-RunSentry is a lightweight local health observer for long-running commands and Python jobs.
+RunSentry is a lightweight local health observer for long-running commands and Python
+jobs.
 
-The P0 target CLI is:
+It wraps one command, observes factual activity, writes local telemetry, and reports a
+conservative health state. It is designed for cases where you want to leave a command
+running without repeatedly checking whether it is still doing useful work.
 
-```text
-runsentry run --name JOB_NAME --watch PATH -- python3 job.py
+RunSentry is observer-first, local-first, non-invasive, and conservative. It does not
+automatically kill, restart, recover, schedule, or modify workloads.
+
+## Current P0 capabilities
+
+RunSentry P0 can:
+
+- launch a command directly with `shell=False`;
+- preserve the child command argv after an explicit `--` boundary;
+- tee child stdout and stderr back to the terminal as byte streams;
+- count stdout/stderr bytes and chunks without storing output content;
+- observe process/resource facts with `psutil`;
+- observe watched file/directory size, mtime, file count, and disk usage facts;
+- write local `.runsentry/runs/<run_id>/telemetry.jsonl`;
+- write local `.runsentry/runs/<run_id>/summary.json`;
+- emit conservative health states:
+  - `STARTING`
+  - `HEALTHY`
+  - `QUIET`
+  - `SUSPECTED_STALL`
+  - `FAILED`
+  - `COMPLETE`
+
+`SUSPECTED_STALL` is a conservative suspicion, not proof. Silence alone is not a stall.
+No watch path is not stall evidence. Unavailable metrics reduce confidence.
+
+## Install from source
+
+RunSentry currently targets Python 3.10+ on macOS and Linux.
+
+```bash
+python -m pip install -e .
 ```
 
-Current RS-P0-005 behavior implements the command boundary, safe launch primitive, stdout/stderr byte observation, and internal factual process/resource snapshots:
+For development tests:
 
-```text
-runsentry run [--name JOB_NAME] -- COMMAND [ARG ...]
+```bash
+python -m pip install -e ".[test]"
+python -m pytest -q
 ```
 
-It launches the command directly with `shell=False`, inherits stdin, forwards stdout/stderr as raw bytes through separate pipes, periodically samples factual process/resource data, waits for completion, and propagates the child exit result. Telemetry, health states, watched paths, and interpretation logic are not implemented yet.
+## Basic usage
 
-Core principles:
+Always put the command to run after the explicit `--` boundary:
 
-- observer-first
-- local-first
-- non-invasive
-- conservative health judgment
-- does not automatically kill workloads
+```bash
+runsentry run --name demo -- python3 -c "import time; time.sleep(2)"
+```
 
-P0 is intentionally small. It does not include a web dashboard, SaaS service, user accounts, billing, Redis, Kubernetes, Docker requirements, task queues, AI/LLM health judgment, automatic kill, or automatic recovery.
+Watch an output file or directory:
 
-## Development Status
+```bash
+runsentry run --name io-demo --watch out.log -- python3 job.py
+```
 
-This repository is currently at scaffold stage. The implementation contract is defined in:
+Use more than one watch path:
 
-- `docs/RS-P0-001-specification.md`
-- `docs/RS-P0-001A-audit.md`
-- `docs/RS-P0-002-scaffold-record.md`
-- `docs/RS-P0-003-execution-record.md`
-- `docs/RS-P0-004-output-observation-record.md`
-- `docs/RS-P0-004A-repository-isolation-record.md`
-- `docs/RS-P0-005-process-resource-record.md`
+```bash
+runsentry run --watch out.log --watch output_dir -- python3 job.py
+```
+
+Everything after `--` belongs to the child command unchanged:
+
+```bash
+runsentry run --name outer -- python3 job.py --watch child-value
+```
+
+RunSentry does not invoke a shell. If you need shell syntax, launch the shell explicitly:
+
+```bash
+runsentry run --name shell-demo -- bash -lc 'python3 job.py | tee output.log'
+```
+
+In that case, the shell is the observed root process and shell quoting rules are your
+responsibility.
+
+## Output artifacts
+
+By default, each run writes:
+
+```text
+.runsentry/
+  runs/
+    <run_id>/
+      telemetry.jsonl
+      summary.json
+```
+
+Use `--output-dir` to place artifacts elsewhere:
+
+```bash
+runsentry run --output-dir /tmp/runsentry-demo -- python3 job.py
+```
+
+Telemetry is local. RunSentry does not upload data or contact a service.
+
+RunSentry stores stdout/stderr activity counters, not stdout/stderr content. Command argv
+is stored because it is part of the factual launch record, so avoid putting secrets in
+command arguments.
+
+## Health states
+
+- `STARTING`: the run is inside the initial observation window.
+- `HEALTHY`: recent positive activity was observed.
+- `QUIET`: little activity is visible, but evidence is insufficient to suspect a stall.
+- `SUSPECTED_STALL`: multiple independent available signals show sustained inactivity.
+- `FAILED`: the wrapped root command failed to launch or exited nonzero.
+- `COMPLETE`: the wrapped root command completed successfully under current P0 semantics.
+
+Only `FAILED` and `COMPLETE` are ordinary terminal success/failure states. `SUSPECTED_STALL`
+can recover if activity resumes.
+
+## P0 limitations
+
+RunSentry P0 is intentionally small:
+
+- local machine only;
+- macOS and Linux target;
+- no Windows compatibility promise yet;
+- no web dashboard;
+- no SaaS or remote monitoring;
+- no notifications;
+- no database;
+- no workflow orchestration;
+- no AI/LLM health judgment;
+- no automatic kill or recovery;
+- no OOM prediction;
+- no disk exhaustion prediction;
+- no generic job-completion ETA.
+
+Process/resource visibility may be partial due to OS permissions. The health logic is
+conservative and may miss real stalls rather than creating aggressive false positives.
+
+## More detail
+
+See [docs/public-alpha.md](docs/public-alpha.md) for the public-alpha readiness notes.
+
+Historical design and implementation records live in `docs/RS-P0-*.md`.
 
 ## License
 

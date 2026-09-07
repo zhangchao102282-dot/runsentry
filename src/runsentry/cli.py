@@ -12,7 +12,7 @@ from .version import __version__
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="runsentry",
-        description="Local health observer for long-running commands.",
+        description="Local conservative health observer for one long-running command.",
     )
     parser.add_argument(
         "--version",
@@ -23,15 +23,18 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command_name")
     run_parser = subparsers.add_parser(
         "run",
-        help="launch a command and tee stdout/stderr",
-        description="Launch a command directly and observe stdout/stderr bytes.",
+        help="observe a command after an explicit -- boundary",
+        description=(
+            "Launch COMMAND directly with shell=False, tee stdout/stderr, "
+            "observe local facts, and write .runsentry telemetry."
+        ),
     )
-    run_parser.add_argument("--name", default=None)
+    run_parser.add_argument("--name", default=None, help="optional human-readable run name")
     run_parser.add_argument(
         "--interval",
         type=float,
         default=DEFAULT_RESOURCE_SAMPLE_INTERVAL_S,
-        help="resource sampling interval in seconds",
+        help="resource/watch/telemetry sampling interval in seconds",
     )
     run_parser.add_argument(
         "--watch",
@@ -47,7 +50,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument(
         "run_args",
         nargs=argparse.REMAINDER,
-        help="RunSentry options, then --, then the child command argv",
+        help="must contain -- followed by COMMAND [ARG ...]; all arguments after -- belong to the child",
     )
     run_parser.set_defaults(func=_run)
     return parser
