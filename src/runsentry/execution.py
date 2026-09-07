@@ -15,6 +15,7 @@ from .observation import (
     root_create_time_for_pid,
 )
 from .output import OutputPump, StreamActivitySnapshot, make_output_pump
+from .telemetry import TelemetryInitializationError, TelemetryWriter
 from .watch import PathObserver, WatchedPathObservation
 
 EXIT_USAGE = 2
@@ -31,6 +32,7 @@ class RunSpec:
     argv: list[str]
     sample_interval_s: float = DEFAULT_RESOURCE_SAMPLE_INTERVAL_S
     watch_paths: list[str] | None = None
+    output_dir: str | None = None
 
 
 @dataclass(frozen=True)
@@ -62,6 +64,9 @@ class ExecutionResult:
     output_drained: bool
     latest_resource_snapshot: ResourceSnapshot | None
     latest_watched_paths: tuple[WatchedPathObservation, ...]
+    run_id: str
+    telemetry_path: str
+    summary_path: str
 
 
 @dataclass(frozen=True)
@@ -72,6 +77,7 @@ class _RunningProcess:
     output_pump: OutputPump
     observer: ProcessResourceObserver
     path_observer: PathObserver
+    telemetry: TelemetryWriter
 
 
 @dataclass
@@ -125,7 +131,7 @@ class _SignalState:
                 self.sigint_observed = True
 
 
-def launch_process(run_spec: RunSpec) -> _RunningProcess:
+def launch_process(run_spec: RunSpec, telemetry: TelemetryWriter) -> _RunningProcess:
     try:
         process = subprocess.Popen(
             run_spec.argv,
@@ -178,8 +184,22 @@ def launch_process(run_spec: RunSpec) -> _RunningProcess:
     )
     path_observer = PathObserver(run_spec.watch_paths or [])
     output_pump.start()
-    observer.sample()
-    path_observer.sample()
+    resource_snapshot = observer.sample()
+    watched_paths = path_observer.sample()
+    telemetry.write_run_started(
+        name=run_spec.name,
+        argv=run_spec.argv,
+        root_pid=info.pid,
+        root_create_time_epoch_s=info.root_create_time_epoch_s,
+        watched_paths=run_spec.watch_paths or [],
+        sample_interval_s=run_spec.sample_interval_s,
+    )
+    telemetry.write_sample(
+        resource_snapshot=resource_snapshot,
+        stdout_activity=output_pump.stdout_snapshot(),
+        stderr_activity=output_pump.stderr_snapshot(),
+        watched_paths=watched_paths,
+    )
     return _RunningProcess(
         run_spec=run_spec,
         info=info,
@@ -187,19 +207,27 @@ def launch_process(run_spec: RunSpec) -> _RunningProcess:
         output_pump=output_pump,
         observer=observer,
         path_observer=path_observer,
+        telemetry=telemetry,
     )
 
 
 def execute_command(run_spec: RunSpec) -> ExecutionResult:
+    try:
+        telemetry = TelemetryWriter.create(run_spec.output_dir)
+    except TelemetryInitializationError as exc:
+        raise LaunchError(str(exc), EXIT_INTERNAL_ERROR) from exc
+
     signal_state = _SignalState()
     signal_state.install_wakeup_fd()
     previous_sigint_handler = signal.signal(signal.SIGINT, signal_state.record_sigint)
     try:
-        running = launch_process(run_spec)
+        running = launch_process(run_spec, telemetry)
         exit_code = wait_for_process(
             running.process,
             running.observer,
             running.path_observer,
+            running.output_pump,
+            running.telemetry,
             signal_state,
             sample_interval_s=running.run_spec.sample_interval_s,
         )
@@ -209,6 +237,7 @@ def execute_command(run_spec: RunSpec) -> ExecutionResult:
     finally:
         signal.signal(signal.SIGINT, previous_sigint_handler)
         signal_state.restore_wakeup_fd()
+        telemetry.close()
 
 
 def _finish_execution(running: _RunningProcess, exit_code: int) -> ExecutionResult:
@@ -216,6 +245,19 @@ def _finish_execution(running: _RunningProcess, exit_code: int) -> ExecutionResu
     latest_watched_paths = running.path_observer.sample()
     output_drained = running.output_pump.join()
     _report_output_failures(running.output_pump)
+    stdout_activity = running.output_pump.stdout_snapshot()
+    stderr_activity = running.output_pump.stderr_snapshot()
+    running.telemetry.write_run_finished(
+        name=running.info.name,
+        argv=running.info.argv,
+        exit_code=exit_code,
+        child_returncode=running.process.returncode,
+        output_drained=output_drained,
+        resource_snapshot=latest_snapshot,
+        stdout_activity=stdout_activity,
+        stderr_activity=stderr_activity,
+        watched_paths=latest_watched_paths,
+    )
     return ExecutionResult(
         exit_code=exit_code,
         launch_info=LaunchInfo(
@@ -226,11 +268,14 @@ def _finish_execution(running: _RunningProcess, exit_code: int) -> ExecutionResu
             root_create_time_epoch_s=running.info.root_create_time_epoch_s,
             returncode=running.process.returncode,
         ),
-        stdout_activity=running.output_pump.stdout_snapshot(),
-        stderr_activity=running.output_pump.stderr_snapshot(),
+        stdout_activity=stdout_activity,
+        stderr_activity=stderr_activity,
         output_drained=output_drained,
         latest_resource_snapshot=latest_snapshot,
         latest_watched_paths=latest_watched_paths,
+        run_id=running.telemetry.run_id,
+        telemetry_path=str(running.telemetry.paths.telemetry_path),
+        summary_path=str(running.telemetry.paths.summary_path),
     )
 
 
@@ -238,6 +283,8 @@ def wait_for_process(
     process: subprocess.Popen[bytes],
     observer: ProcessResourceObserver,
     path_observer: PathObserver,
+    output_pump: OutputPump,
+    telemetry: TelemetryWriter,
     signal_state: _SignalState,
     sample_interval_s: float = DEFAULT_RESOURCE_SAMPLE_INTERVAL_S,
 ) -> int:
@@ -267,8 +314,12 @@ def wait_for_process(
             return _return_code_to_exit_code(returncode)
         except subprocess.TimeoutExpired:
             if time.monotonic() >= next_sample_monotonic_s:
-                observer.sample()
-                path_observer.sample()
+                telemetry.write_sample(
+                    resource_snapshot=observer.sample(),
+                    stdout_activity=output_pump.stdout_snapshot(),
+                    stderr_activity=output_pump.stderr_snapshot(),
+                    watched_paths=path_observer.sample(),
+                )
                 next_sample_monotonic_s = time.monotonic() + sample_interval_s
 
 

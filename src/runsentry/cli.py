@@ -40,6 +40,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="path to observe for factual size/mtime/disk data",
     )
     run_parser.add_argument(
+        "--output-dir",
+        default=None,
+        help="directory for RunSentry telemetry artifacts",
+    )
+    run_parser.add_argument(
         "run_args",
         nargs=argparse.REMAINDER,
         help="RunSentry options, then --, then the child command argv",
@@ -52,6 +57,7 @@ def _parse_run_args(
     name: str | None,
     interval: float,
     watches: Sequence[str],
+    output_dir: str | None,
     run_args: Sequence[str],
 ) -> RunSpec:
     if interval < 1.0 or interval > 60.0:
@@ -76,6 +82,7 @@ def _parse_run_args(
         argv=command_argv,
         sample_interval_s=interval,
         watch_paths=watch_paths,
+        output_dir=output_dir,
     )
 
 
@@ -96,7 +103,13 @@ def _parse_watch_options(option_args: list[str]) -> list[str]:
 
 def _run(args: argparse.Namespace) -> int:
     try:
-        run_spec = _parse_run_args(args.name, args.interval, args.watch, args.run_args)
+        run_spec = _parse_run_args(
+            args.name,
+            args.interval,
+            args.watch,
+            args.output_dir,
+            args.run_args,
+        )
         return run_command(run_spec)
     except LaunchError as exc:
         print(f"runsentry: {exc}", file=sys.stderr)
