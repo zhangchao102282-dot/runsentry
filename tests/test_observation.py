@@ -21,7 +21,11 @@ def test_root_process_observation_and_rss() -> None:
     process = _start_python("import time; time.sleep(3)")
     try:
         observer = _observer_for_process(process)
-        snapshot = _wait_for(lambda: observer.sample().root_observation.alive)
+        def alive_snapshot():
+            sample = observer.sample()
+            return sample if sample.root_observation.alive else None
+
+        snapshot = _wait_for(alive_snapshot)
         assert snapshot.root_identity.pid == process.pid
         assert snapshot.root_observation.status is not None
         assert snapshot.root_observation.rss_bytes is None or snapshot.root_observation.rss_bytes >= 0
@@ -54,9 +58,7 @@ def test_child_discovery_and_recursive_descendants() -> None:
     try:
         observer = _observer_for_process(process)
         snapshot = _wait_for(
-            lambda: observer.sample()
-            if observer.sample().observable_descendant_count >= 2
-            else None,
+            lambda: _descendant_snapshot_or_skip(observer, minimum_count=2),
             timeout_s=5.0,
         )
         assert snapshot.observable_descendant_count >= 2
@@ -84,9 +86,7 @@ def test_descendant_registry_retains_observed_outliving_child() -> None:
         assert process.stdout.readline().strip() == "ready"
         observer = _observer_for_process(process)
         observed = _wait_for(
-            lambda: observer.sample()
-            if observer.sample().observable_descendant_count >= 1
-            else None,
+            lambda: _descendant_snapshot_or_skip(observer, minimum_count=1),
             timeout_s=2.0,
         )
         assert observed.known_descendants
@@ -133,9 +133,7 @@ def test_tree_rss_aggregation_and_completeness_metadata() -> None:
     try:
         observer = _observer_for_process(process)
         snapshot = _wait_for(
-            lambda: observer.sample()
-            if observer.sample().observable_descendant_count >= 1
-            else None,
+            lambda: _descendant_snapshot_or_skip(observer, minimum_count=1),
             timeout_s=5.0,
         )
         assert snapshot.tree_rss_bytes is None or snapshot.tree_rss_bytes >= 0
@@ -246,6 +244,15 @@ def _wait_for(callback, timeout_s: float = 4.0):
     raise AssertionError("condition was not met before timeout")
 
 
+def _descendant_snapshot_or_skip(observer: ProcessResourceObserver, minimum_count: int):
+    snapshot = observer.sample()
+    if "descendant_discovery_access_denied" in snapshot.unavailable_reasons:
+        pytest.skip("psutil descendant enumeration is unavailable in this environment")
+    if snapshot.observable_descendant_count >= minimum_count:
+        return snapshot
+    return None
+
+
 def _terminate_process(process: subprocess.Popen) -> None:
     if process.poll() is None:
         process.terminate()
@@ -260,7 +267,7 @@ def _terminate_tree(process: subprocess.Popen) -> None:
     try:
         root = psutil.Process(process.pid)
         children = root.children(recursive=True)
-    except psutil.Error:
+    except (psutil.Error, PermissionError):
         children = []
     _terminate_process(process)
     for child in children:

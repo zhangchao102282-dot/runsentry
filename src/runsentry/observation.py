@@ -159,7 +159,9 @@ class ProcessResourceObserver:
                 self._cpu_primed_pids,
             )
             observations.append(root_observation)
-            self._discover_descendants(root_process)
+            descendant_discovery_reason = self._discover_descendants(root_process)
+            if descendant_discovery_reason is not None:
+                reasons.append(descendant_discovery_reason)
 
         for identity in list(self.registry.descendants.values()):
             lookup = _lookup_process_for_identity(identity)
@@ -248,20 +250,23 @@ class ProcessResourceObserver:
         self.latest_snapshot = snapshot
         return snapshot
 
-    def _discover_descendants(self, root_process: Any) -> None:
+    def _discover_descendants(self, root_process: Any) -> str | None:
         try:
             children = root_process.children(recursive=True)
         except psutil.NoSuchProcess:
-            return
+            return "descendant_discovery_race"
         except psutil.AccessDenied:
-            return
+            return "descendant_discovery_access_denied"
         except psutil.ZombieProcess:
-            return
+            return "descendant_discovery_race"
+        except PermissionError:
+            return "descendant_discovery_access_denied"
 
         for child in children:
             identity = _identity_for_process(child)
             if identity is not None:
                 self.registry.remember_descendant(identity)
+        return None
 
 
 @dataclass(frozen=True)
@@ -275,14 +280,14 @@ def root_create_time_for_pid(pid: int) -> float | None:
         return None
     try:
         return float(psutil.Process(pid).create_time())
-    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, PermissionError):
         return None
 
 
 def _identity_for_process(process: Any) -> ProcessIdentity | None:
     try:
         return ProcessIdentity(pid=int(process.pid), create_time_epoch_s=float(process.create_time()))
-    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, PermissionError):
         return None
 
 
@@ -300,6 +305,8 @@ def _lookup_process_for_identity(identity: ProcessIdentity) -> _ProcessLookup:
         return _ProcessLookup("access_denied")
     except psutil.ZombieProcess:
         return _ProcessLookup("missing")
+    except PermissionError:
+        return _ProcessLookup("access_denied")
 
 
 def _observe_process(
@@ -348,6 +355,16 @@ def _observe_process(
             zombie=True,
         )
     except psutil.AccessDenied:
+        return ProcessObservation(
+            identity=identity,
+            role=role,
+            alive=True,
+            status=None,
+            cpu_percent=None,
+            rss_bytes=None,
+            access_denied=True,
+        )
+    except PermissionError:
         return ProcessObservation(
             identity=identity,
             role=role,

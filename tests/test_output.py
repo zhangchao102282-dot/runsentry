@@ -3,6 +3,7 @@ import os
 import signal
 import subprocess
 import sys
+import time
 
 from runsentry.execution import EXIT_SIGINT, RunSpec, execute_command
 from runsentry.output import READ_CHUNK_SIZE, BinaryOutputSink, StreamDrainer
@@ -154,26 +155,26 @@ def test_nonzero_child_exit_still_drains_output() -> None:
     assert "TAIL_BEFORE_EXIT" in result.stdout
 
 
-def test_ctrl_c_behavior_with_output_pipes() -> None:
+def test_ctrl_c_behavior_with_output_pipes(tmp_path) -> None:
+    ready_path = tmp_path / "ready.txt"
     child = (
-        "import signal, sys, time\n"
+        "import pathlib, signal, sys, time\n"
         "def handle(signum, frame):\n"
         "    raise SystemExit(130)\n"
         "signal.signal(signal.SIGINT, handle)\n"
-        "print('ready', flush=True)\n"
-        "time.sleep(3)\n"
+        "pathlib.Path(sys.argv[1]).write_text('ready')\n"
+        "time.sleep(30)\n"
     )
     process = subprocess.Popen(
-        [sys.executable, "-m", "runsentry", "run", "--", sys.executable, "-c", child],
+        [sys.executable, "-m", "runsentry", "run", "--", sys.executable, "-c", child, str(ready_path)],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
         start_new_session=True,
     )
     try:
-        assert process.stdout is not None
-        assert process.stdout.readline().strip() == "ready"
-        os.killpg(process.pid, signal.SIGINT)
+        _wait_for_path(ready_path)
+        os.killpg(os.getpgid(process.pid), signal.SIGINT)
         stdout, stderr = process.communicate(timeout=8)
     finally:
         if process.poll() is None:
@@ -216,3 +217,12 @@ def test_stream_drainer_does_not_retain_output_content() -> None:
 
 def _runsentry_args(script_parts: list[str]) -> list[str]:
     return [sys.executable, "-m", "runsentry", "run", "--", sys.executable, "-c", *script_parts]
+
+
+def _wait_for_path(path, timeout_s: float = 5.0) -> None:
+    deadline_s = time.monotonic() + timeout_s
+    while time.monotonic() < deadline_s:
+        if path.exists():
+            return
+        time.sleep(0.05)
+    raise AssertionError(f"timed out waiting for {path}")

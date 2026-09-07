@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import errno
+import os
 import signal
 import subprocess
 import sys
@@ -20,6 +21,7 @@ EXIT_PERMISSION_DENIED = 126
 EXIT_COMMAND_NOT_FOUND = 127
 EXIT_INTERNAL_ERROR = 1
 EXIT_SIGINT = 130
+PROCESS_WAIT_POLL_INTERVAL_S = 0.1
 
 
 @dataclass(frozen=True)
@@ -60,18 +62,63 @@ class ExecutionResult:
 
 
 @dataclass(frozen=True)
-class _WaitOutcome:
-    exit_code: int
-    restore_sigint_handler: object | None = None
-
-
-@dataclass(frozen=True)
 class _RunningProcess:
     run_spec: RunSpec
     info: LaunchInfo
     process: subprocess.Popen[bytes]
     output_pump: OutputPump
     observer: ProcessResourceObserver
+
+
+@dataclass
+class _SignalState:
+    sigint_observed: bool = False
+    wakeup_read_fd: int | None = None
+    wakeup_write_fd: int | None = None
+    previous_wakeup_fd: int = -1
+
+    def record_sigint(self, signum: int, frame: object) -> None:
+        _ = signum, frame
+        self.sigint_observed = True
+
+    def install_wakeup_fd(self) -> None:
+        read_fd, write_fd = os.pipe()
+        os.set_blocking(read_fd, False)
+        os.set_blocking(write_fd, False)
+        self.wakeup_read_fd = read_fd
+        self.wakeup_write_fd = write_fd
+        self.previous_wakeup_fd = signal.set_wakeup_fd(write_fd)
+
+    def restore_wakeup_fd(self) -> None:
+        signal.set_wakeup_fd(self.previous_wakeup_fd)
+        for fd in (self.wakeup_read_fd, self.wakeup_write_fd):
+            if fd is not None:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+        self.wakeup_read_fd = None
+        self.wakeup_write_fd = None
+        self.previous_wakeup_fd = -1
+
+    def observed_sigint(self) -> bool:
+        self._drain_wakeup_fd()
+        return self.sigint_observed
+
+    def _drain_wakeup_fd(self) -> None:
+        if self.wakeup_read_fd is None:
+            return
+        while True:
+            try:
+                data = os.read(self.wakeup_read_fd, 1024)
+            except BlockingIOError:
+                return
+            except OSError:
+                return
+            if not data:
+                return
+            if signal.SIGINT in data:
+                self.sigint_observed = True
 
 
 def launch_process(run_spec: RunSpec) -> _RunningProcess:
@@ -137,24 +184,23 @@ def launch_process(run_spec: RunSpec) -> _RunningProcess:
 
 
 def execute_command(run_spec: RunSpec) -> ExecutionResult:
-    running = launch_process(run_spec)
-    restore_sigint_handler: object | None = None
+    signal_state = _SignalState()
+    signal_state.install_wakeup_fd()
+    previous_sigint_handler = signal.signal(signal.SIGINT, signal_state.record_sigint)
     try:
-        try:
-            wait_outcome = wait_for_process(
-                running.process,
-                running.observer,
-                sample_interval_s=running.run_spec.sample_interval_s,
-            )
-            restore_sigint_handler = wait_outcome.restore_sigint_handler
-            return _finish_execution(running, wait_outcome.exit_code)
-        except KeyboardInterrupt:
-            restore_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
-            _handle_keyboard_interrupt(running.process)
-            return _finish_execution(running, EXIT_SIGINT)
+        running = launch_process(run_spec)
+        exit_code = wait_for_process(
+            running.process,
+            running.observer,
+            signal_state,
+            sample_interval_s=running.run_spec.sample_interval_s,
+        )
+        if signal_state.observed_sigint():
+            exit_code = EXIT_SIGINT
+        return _finish_execution(running, exit_code)
     finally:
-        if restore_sigint_handler is not None:
-            signal.signal(signal.SIGINT, restore_sigint_handler)
+        signal.signal(signal.SIGINT, previous_sigint_handler)
+        signal_state.restore_wakeup_fd()
 
 
 def _finish_execution(running: _RunningProcess, exit_code: int) -> ExecutionResult:
@@ -181,35 +227,44 @@ def _finish_execution(running: _RunningProcess, exit_code: int) -> ExecutionResu
 def wait_for_process(
     process: subprocess.Popen[bytes],
     observer: ProcessResourceObserver,
+    signal_state: _SignalState,
     sample_interval_s: float = DEFAULT_RESOURCE_SAMPLE_INTERVAL_S,
-) -> _WaitOutcome:
-    try:
-        while True:
-            try:
-                returncode = process.wait(timeout=sample_interval_s)
-                return _WaitOutcome(_return_code_to_exit_code(returncode))
-            except subprocess.TimeoutExpired:
+) -> int:
+    interrupt_deadline_s: float | None = None
+    next_sample_monotonic_s = time.monotonic() + sample_interval_s
+    while True:
+        now_s = time.monotonic()
+        timeout_s = min(
+            PROCESS_WAIT_POLL_INTERVAL_S,
+            max(0.0, next_sample_monotonic_s - now_s),
+        )
+        if signal_state.observed_sigint():
+            if process.poll() is not None:
+                return EXIT_SIGINT
+            if interrupt_deadline_s is None:
+                interrupt_deadline_s = time.monotonic() + 5.0
+            remaining_s = interrupt_deadline_s - time.monotonic()
+            if remaining_s <= 0:
+                _report_child_still_running_after_interrupt()
+                return EXIT_SIGINT
+            timeout_s = min(timeout_s, remaining_s)
+
+        try:
+            returncode = process.wait(timeout=timeout_s)
+            if signal_state.observed_sigint():
+                return EXIT_SIGINT
+            return _return_code_to_exit_code(returncode)
+        except subprocess.TimeoutExpired:
+            if time.monotonic() >= next_sample_monotonic_s:
                 observer.sample()
-    except KeyboardInterrupt:
-        restore_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
-        return _WaitOutcome(
-            _handle_keyboard_interrupt(process),
-            restore_sigint_handler=restore_handler,
-        )
+                next_sample_monotonic_s = time.monotonic() + sample_interval_s
 
 
-def _handle_keyboard_interrupt(process: subprocess.Popen[bytes]) -> int:
-    if process.poll() is not None:
-        return EXIT_SIGINT
-
-    try:
-        process.wait(timeout=5.0)
-    except subprocess.TimeoutExpired:
-        print(
-            "runsentry: interrupted; child is still running and was not killed.",
-            file=sys.stderr,
-        )
-    return EXIT_SIGINT
+def _report_child_still_running_after_interrupt() -> None:
+    print(
+        "runsentry: interrupted; child is still running and was not killed.",
+        file=sys.stderr,
+    )
 
 
 def _return_code_to_exit_code(returncode: int) -> int:

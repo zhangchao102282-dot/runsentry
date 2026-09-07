@@ -3,6 +3,9 @@ import os
 import signal
 import subprocess
 import sys
+import time
+
+import pytest
 
 from runsentry.cli import main
 from runsentry.execution import (
@@ -13,7 +16,9 @@ from runsentry.execution import (
 
 
 def test_cli_help_returns_success(capsys) -> None:
-    assert main(["--help"]) == 0
+    with pytest.raises(SystemExit) as exc_info:
+        main(["--help"])
+    assert exc_info.value.code == 0
     captured = capsys.readouterr()
     assert "runsentry" in captured.out
     assert "run" in captured.out
@@ -151,26 +156,26 @@ def test_argv_preservation_with_literal_special_arguments(tmp_path) -> None:
     assert json.loads(argv_path.read_text()) == child_args
 
 
-def test_ctrl_c_waits_for_child_interrupt_without_manual_double_forwarding() -> None:
+def test_ctrl_c_waits_for_child_interrupt_without_manual_double_forwarding(tmp_path) -> None:
+    ready_path = tmp_path / "ready.txt"
     child = (
-        "import signal, sys, time\n"
+        "import pathlib, signal, sys, time\n"
         "def handle(signum, frame):\n"
         "    raise SystemExit(130)\n"
         "signal.signal(signal.SIGINT, handle)\n"
-        "print('ready', flush=True)\n"
-        "time.sleep(3)\n"
+        "pathlib.Path(sys.argv[1]).write_text('ready')\n"
+        "time.sleep(30)\n"
     )
     process = subprocess.Popen(
-        _runsentry_run_args([sys.executable, "-c", child]),
+        _runsentry_run_args([sys.executable, "-c", child, str(ready_path)]),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
         start_new_session=True,
     )
     try:
-        assert process.stdout is not None
-        assert process.stdout.readline().strip() == "ready"
-        os.killpg(process.pid, signal.SIGINT)
+        _wait_for_path(ready_path)
+        os.killpg(os.getpgid(process.pid), signal.SIGINT)
         stdout, stderr = process.communicate(timeout=8)
     finally:
         if process.poll() is None:
@@ -179,11 +184,20 @@ def test_ctrl_c_waits_for_child_interrupt_without_manual_double_forwarding() -> 
 
     assert process.returncode == EXIT_SIGINT
     assert "interrupted; child is still running" not in stderr
-    assert "ready" not in stdout
+    assert stdout == ""
 
 
 def _runsentry_run_args(child_argv: list[str]) -> list[str]:
     return [sys.executable, "-m", "runsentry", "run", "--name", "outer", "--", *child_argv]
+
+
+def _wait_for_path(path, timeout_s: float = 5.0) -> None:
+    deadline_s = time.monotonic() + timeout_s
+    while time.monotonic() < deadline_s:
+        if path.exists():
+            return
+        time.sleep(0.05)
+    raise AssertionError(f"timed out waiting for {path}")
 
 
 def _argv_writer_command(argv_path, child_args: list[str]) -> list[str]:
