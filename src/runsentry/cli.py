@@ -34,6 +34,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="resource sampling interval in seconds",
     )
     run_parser.add_argument(
+        "--watch",
+        action="append",
+        default=[],
+        help="path to observe for factual size/mtime/disk data",
+    )
+    run_parser.add_argument(
         "run_args",
         nargs=argparse.REMAINDER,
         help="RunSentry options, then --, then the child command argv",
@@ -45,6 +51,7 @@ def build_parser() -> argparse.ArgumentParser:
 def _parse_run_args(
     name: str | None,
     interval: float,
+    watches: Sequence[str],
     run_args: Sequence[str],
 ) -> RunSpec:
     if interval < 1.0 or interval > 60.0:
@@ -62,18 +69,34 @@ def _parse_run_args(
     if not command_argv:
         raise LaunchError("runsentry run requires a command after --.", EXIT_USAGE)
 
-    if option_args:
-        raise LaunchError(
-            f"unexpected argument before --: {option_args[0]}",
-            EXIT_USAGE,
-        )
+    watch_paths = list(watches) + _parse_watch_options(option_args)
 
-    return RunSpec(name=name, argv=command_argv, sample_interval_s=interval)
+    return RunSpec(
+        name=name,
+        argv=command_argv,
+        sample_interval_s=interval,
+        watch_paths=watch_paths,
+    )
+
+
+def _parse_watch_options(option_args: list[str]) -> list[str]:
+    watch_paths: list[str] = []
+    index = 0
+    while index < len(option_args):
+        arg = option_args[index]
+        if arg != "--watch":
+            raise LaunchError(f"unexpected argument before --: {arg}", EXIT_USAGE)
+        index += 1
+        if index >= len(option_args):
+            raise LaunchError("runsentry run --watch requires a path.", EXIT_USAGE)
+        watch_paths.append(option_args[index])
+        index += 1
+    return watch_paths
 
 
 def _run(args: argparse.Namespace) -> int:
     try:
-        run_spec = _parse_run_args(args.name, args.interval, args.run_args)
+        run_spec = _parse_run_args(args.name, args.interval, args.watch, args.run_args)
         return run_command(run_spec)
     except LaunchError as exc:
         print(f"runsentry: {exc}", file=sys.stderr)

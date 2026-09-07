@@ -15,6 +15,7 @@ from .observation import (
     root_create_time_for_pid,
 )
 from .output import OutputPump, StreamActivitySnapshot, make_output_pump
+from .watch import PathObserver, WatchedPathObservation
 
 EXIT_USAGE = 2
 EXIT_PERMISSION_DENIED = 126
@@ -29,6 +30,7 @@ class RunSpec:
     name: str | None
     argv: list[str]
     sample_interval_s: float = DEFAULT_RESOURCE_SAMPLE_INTERVAL_S
+    watch_paths: list[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -59,6 +61,7 @@ class ExecutionResult:
     stderr_activity: StreamActivitySnapshot
     output_drained: bool
     latest_resource_snapshot: ResourceSnapshot | None
+    latest_watched_paths: tuple[WatchedPathObservation, ...]
 
 
 @dataclass(frozen=True)
@@ -68,6 +71,7 @@ class _RunningProcess:
     process: subprocess.Popen[bytes]
     output_pump: OutputPump
     observer: ProcessResourceObserver
+    path_observer: PathObserver
 
 
 @dataclass
@@ -172,14 +176,17 @@ def launch_process(run_spec: RunSpec) -> _RunningProcess:
         launch_monotonic_s=info.start_monotonic_s,
         root_create_time_epoch_s=info.root_create_time_epoch_s,
     )
+    path_observer = PathObserver(run_spec.watch_paths or [])
     output_pump.start()
     observer.sample()
+    path_observer.sample()
     return _RunningProcess(
         run_spec=run_spec,
         info=info,
         process=process,
         output_pump=output_pump,
         observer=observer,
+        path_observer=path_observer,
     )
 
 
@@ -192,6 +199,7 @@ def execute_command(run_spec: RunSpec) -> ExecutionResult:
         exit_code = wait_for_process(
             running.process,
             running.observer,
+            running.path_observer,
             signal_state,
             sample_interval_s=running.run_spec.sample_interval_s,
         )
@@ -205,6 +213,7 @@ def execute_command(run_spec: RunSpec) -> ExecutionResult:
 
 def _finish_execution(running: _RunningProcess, exit_code: int) -> ExecutionResult:
     latest_snapshot = running.observer.sample()
+    latest_watched_paths = running.path_observer.sample()
     output_drained = running.output_pump.join()
     _report_output_failures(running.output_pump)
     return ExecutionResult(
@@ -221,12 +230,14 @@ def _finish_execution(running: _RunningProcess, exit_code: int) -> ExecutionResu
         stderr_activity=running.output_pump.stderr_snapshot(),
         output_drained=output_drained,
         latest_resource_snapshot=latest_snapshot,
+        latest_watched_paths=latest_watched_paths,
     )
 
 
 def wait_for_process(
     process: subprocess.Popen[bytes],
     observer: ProcessResourceObserver,
+    path_observer: PathObserver,
     signal_state: _SignalState,
     sample_interval_s: float = DEFAULT_RESOURCE_SAMPLE_INTERVAL_S,
 ) -> int:
@@ -257,6 +268,7 @@ def wait_for_process(
         except subprocess.TimeoutExpired:
             if time.monotonic() >= next_sample_monotonic_s:
                 observer.sample()
+                path_observer.sample()
                 next_sample_monotonic_s = time.monotonic() + sample_interval_s
 
 
