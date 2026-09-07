@@ -8,13 +8,13 @@ The P0 target CLI is:
 runsentry run --name JOB_NAME --watch PATH -- python3 job.py
 ```
 
-Current RS-P0-004 behavior implements the command boundary, safe launch primitive, and stdout/stderr byte observation:
+Current RS-P0-005 behavior implements the command boundary, safe launch primitive, stdout/stderr byte observation, and internal factual process/resource snapshots:
 
 ```text
 runsentry run [--name JOB_NAME] -- COMMAND [ARG ...]
 ```
 
-It launches the command directly with `shell=False`, inherits stdin, forwards stdout/stderr as raw bytes through separate pipes, waits for completion, and propagates the child exit result. Process monitoring, telemetry, health states, and watched paths are not implemented yet.
+It launches the command directly with `shell=False`, inherits stdin, forwards stdout/stderr as raw bytes through separate pipes, periodically samples factual process/resource data, waits for completion, and propagates the child exit result. Telemetry, health states, watched paths, and interpretation logic are not implemented yet.
 
 Core principles:
 
@@ -34,6 +34,9 @@ This repository is currently at scaffold stage. The implementation contract is d
 - `docs/RS-P0-001A-audit.md`
 - `docs/RS-P0-002-scaffold-record.md`
 - `docs/RS-P0-003-execution-record.md`
+- `docs/RS-P0-004-output-observation-record.md`
+- `docs/RS-P0-004A-repository-isolation-record.md`
+- `docs/RS-P0-005-process-resource-record.md`
 
 ## License
 

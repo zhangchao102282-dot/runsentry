@@ -5,6 +5,7 @@ import sys
 from collections.abc import Sequence
 
 from .execution import EXIT_USAGE, LaunchError, RunSpec, run_command
+from .observation import DEFAULT_RESOURCE_SAMPLE_INTERVAL_S
 from .version import __version__
 
 
@@ -27,6 +28,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run_parser.add_argument("--name", default=None)
     run_parser.add_argument(
+        "--interval",
+        type=float,
+        default=DEFAULT_RESOURCE_SAMPLE_INTERVAL_S,
+        help="resource sampling interval in seconds",
+    )
+    run_parser.add_argument(
         "run_args",
         nargs=argparse.REMAINDER,
         help="RunSentry options, then --, then the child command argv",
@@ -35,7 +42,14 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _parse_run_args(name: str | None, run_args: Sequence[str]) -> RunSpec:
+def _parse_run_args(
+    name: str | None,
+    interval: float,
+    run_args: Sequence[str],
+) -> RunSpec:
+    if interval < 1.0 or interval > 60.0:
+        raise LaunchError("runsentry run --interval must be between 1.0 and 60.0.", EXIT_USAGE)
+
     if "--" not in run_args:
         raise LaunchError(
             "runsentry run requires an explicit -- before the command.",
@@ -54,12 +68,12 @@ def _parse_run_args(name: str | None, run_args: Sequence[str]) -> RunSpec:
             EXIT_USAGE,
         )
 
-    return RunSpec(name=name, argv=command_argv)
+    return RunSpec(name=name, argv=command_argv, sample_interval_s=interval)
 
 
 def _run(args: argparse.Namespace) -> int:
     try:
-        run_spec = _parse_run_args(args.name, args.run_args)
+        run_spec = _parse_run_args(args.name, args.interval, args.run_args)
         return run_command(run_spec)
     except LaunchError as exc:
         print(f"runsentry: {exc}", file=sys.stderr)

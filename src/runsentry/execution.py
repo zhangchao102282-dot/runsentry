@@ -7,6 +7,12 @@ import sys
 import time
 from dataclasses import dataclass
 
+from .observation import (
+    DEFAULT_RESOURCE_SAMPLE_INTERVAL_S,
+    ProcessResourceObserver,
+    ResourceSnapshot,
+    root_create_time_for_pid,
+)
 from .output import OutputPump, StreamActivitySnapshot, make_output_pump
 
 EXIT_USAGE = 2
@@ -20,6 +26,7 @@ EXIT_SIGINT = 130
 class RunSpec:
     name: str | None
     argv: list[str]
+    sample_interval_s: float = DEFAULT_RESOURCE_SAMPLE_INTERVAL_S
 
 
 @dataclass(frozen=True)
@@ -28,6 +35,7 @@ class LaunchInfo:
     argv: list[str]
     pid: int
     start_monotonic_s: float
+    root_create_time_epoch_s: float | None = None
     returncode: int | None = None
 
 
@@ -48,6 +56,7 @@ class ExecutionResult:
     stdout_activity: StreamActivitySnapshot
     stderr_activity: StreamActivitySnapshot
     output_drained: bool
+    latest_resource_snapshot: ResourceSnapshot | None
 
 
 @dataclass(frozen=True)
@@ -58,9 +67,11 @@ class _WaitOutcome:
 
 @dataclass(frozen=True)
 class _RunningProcess:
+    run_spec: RunSpec
     info: LaunchInfo
     process: subprocess.Popen[bytes]
     output_pump: OutputPump
+    observer: ProcessResourceObserver
 
 
 def launch_process(run_spec: RunSpec) -> _RunningProcess:
@@ -103,13 +114,26 @@ def launch_process(run_spec: RunSpec) -> _RunningProcess:
         argv=list(run_spec.argv),
         pid=process.pid,
         start_monotonic_s=time.monotonic(),
+        root_create_time_epoch_s=root_create_time_for_pid(process.pid),
     )
     if process.stdout is None or process.stderr is None:
         raise LaunchError("could not create child output pipes", EXIT_INTERNAL_ERROR)
 
     output_pump = make_output_pump(process.stdout, process.stderr)
+    observer = ProcessResourceObserver(
+        root_pid=info.pid,
+        launch_monotonic_s=info.start_monotonic_s,
+        root_create_time_epoch_s=info.root_create_time_epoch_s,
+    )
     output_pump.start()
-    return _RunningProcess(info=info, process=process, output_pump=output_pump)
+    observer.sample()
+    return _RunningProcess(
+        run_spec=run_spec,
+        info=info,
+        process=process,
+        output_pump=output_pump,
+        observer=observer,
+    )
 
 
 def execute_command(run_spec: RunSpec) -> ExecutionResult:
@@ -117,7 +141,11 @@ def execute_command(run_spec: RunSpec) -> ExecutionResult:
     restore_sigint_handler: object | None = None
     try:
         try:
-            wait_outcome = wait_for_process(running.process)
+            wait_outcome = wait_for_process(
+                running.process,
+                running.observer,
+                sample_interval_s=running.run_spec.sample_interval_s,
+            )
             restore_sigint_handler = wait_outcome.restore_sigint_handler
             return _finish_execution(running, wait_outcome.exit_code)
         except KeyboardInterrupt:
@@ -130,6 +158,7 @@ def execute_command(run_spec: RunSpec) -> ExecutionResult:
 
 
 def _finish_execution(running: _RunningProcess, exit_code: int) -> ExecutionResult:
+    latest_snapshot = running.observer.sample()
     output_drained = running.output_pump.join()
     _report_output_failures(running.output_pump)
     return ExecutionResult(
@@ -139,17 +168,28 @@ def _finish_execution(running: _RunningProcess, exit_code: int) -> ExecutionResu
             argv=running.info.argv,
             pid=running.info.pid,
             start_monotonic_s=running.info.start_monotonic_s,
+            root_create_time_epoch_s=running.info.root_create_time_epoch_s,
             returncode=running.process.returncode,
         ),
         stdout_activity=running.output_pump.stdout_snapshot(),
         stderr_activity=running.output_pump.stderr_snapshot(),
         output_drained=output_drained,
+        latest_resource_snapshot=latest_snapshot,
     )
 
 
-def wait_for_process(process: subprocess.Popen[bytes]) -> _WaitOutcome:
+def wait_for_process(
+    process: subprocess.Popen[bytes],
+    observer: ProcessResourceObserver,
+    sample_interval_s: float = DEFAULT_RESOURCE_SAMPLE_INTERVAL_S,
+) -> _WaitOutcome:
     try:
-        return _WaitOutcome(_return_code_to_exit_code(process.wait()))
+        while True:
+            try:
+                returncode = process.wait(timeout=sample_interval_s)
+                return _WaitOutcome(_return_code_to_exit_code(returncode))
+            except subprocess.TimeoutExpired:
+                observer.sample()
     except KeyboardInterrupt:
         restore_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
         return _WaitOutcome(

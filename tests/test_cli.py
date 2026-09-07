@@ -94,6 +94,29 @@ def test_empty_command_after_boundary_is_rejected() -> None:
     assert "requires a command after --" in result.stderr
 
 
+def test_invalid_interval_is_rejected_before_child_launch() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "runsentry",
+            "run",
+            "--interval",
+            "0.5",
+            "--",
+            sys.executable,
+            "-c",
+            "print('invalid interval child should not run')",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == EXIT_USAGE
+    assert "must be between 1.0 and 60.0" in result.stderr
+    assert "invalid interval child should not run" not in result.stdout
+
+
 def test_name_parsing_does_not_leak_to_child_argv(tmp_path) -> None:
     argv_path = tmp_path / "argv.json"
     result = subprocess.run(
