@@ -10,6 +10,12 @@ running without repeatedly checking whether it is still doing useful work.
 RunSentry is observer-first, local-first, non-invasive, and conservative. It does not
 automatically kill, restart, recover, schedule, or modify workloads.
 
+## Public alpha status
+
+RunSentry is in conservative public alpha. The P0 scope is useful for local observation
+and debugging, but it is not a production supervisor or a guaranteed stuck-process
+detector.
+
 ## Current P0 capabilities
 
 RunSentry P0 can:
@@ -145,6 +151,17 @@ conservative and may miss real stalls rather than creating aggressive false posi
 See [docs/public-alpha.md](docs/public-alpha.md) for the public-alpha readiness notes.
 
 Historical design and implementation records live in `docs/RS-P0-*.md`.
+
+## Reporting bugs
+
+Use the GitHub issue templates. For behavior bugs, include:
+
+- OS and Python version;
+- the `runsentry run ...` command, with secrets removed;
+- expected versus actual behavior;
+- a sanitized `summary.json` excerpt if useful.
+
+Do not share command arguments or paths that contain secrets.
 
 ## License
 

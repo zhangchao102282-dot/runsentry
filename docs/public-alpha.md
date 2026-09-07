@@ -48,6 +48,13 @@ Each run contains:
 RunSentry does not store stdout/stderr content and does not upload telemetry. It does
 store command argv and local paths as factual launch/run data.
 
+Before sharing artifacts publicly, users should sanitize:
+
+- command arguments;
+- local paths;
+- run names;
+- any environment-specific metadata that reveals private project details.
+
 ## Health wording
 
 `SUSPECTED_STALL` means conservative suspicion only. It requires multiple independent
@@ -72,6 +79,39 @@ RunSentry never automatically kills or recovers workloads in P0.
 - Directory watching uses polling and recursive scans; very large trees can make samples
   slower.
 - No hosted telemetry, dashboards, notifications, or multi-machine monitoring.
+
+## Useful alpha feedback
+
+Useful issues include:
+
+- commands that fail to launch or preserve argv correctly;
+- stdout/stderr forwarding problems;
+- false `SUSPECTED_STALL` cases;
+- confusing `QUIET` or `HEALTHY` results;
+- missing or misleading facts in `summary.json`;
+- watched-path edge cases on macOS or Linux;
+- telemetry artifacts that are hard to inspect.
+
+Include a sanitized `summary.json` excerpt when it helps explain the behavior.
+
+## GO/KILL signals for continuing the project
+
+Signals that support continuing beyond P0:
+
+- non-owner installs;
+- repeat users;
+- GitHub stars from users outside the original development context;
+- clear bug reports with sanitized summaries;
+- feature requests that fit the local-observer model;
+- credible requests for remote, multi-machine, or hosted capabilities;
+- willingness-to-pay or organizational adoption signals.
+
+Signals that would argue against expansion:
+
+- no use outside the owner after public exposure;
+- repeated confusion about RunSentry being an orchestrator or supervisor;
+- frequent false-positive stall reports that cannot be solved conservatively;
+- little value from generated summaries or telemetry in real use.
 
 ## Minimal examples
 
