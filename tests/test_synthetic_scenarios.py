@@ -3,8 +3,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from helpers import _resource, _stream, _watch
 from runsentry.health import HealthConfig, HealthState, HealthStateMachine
-from tests.test_health import _resource, _stream, _watch
 
 
 SYNTHETIC_DIR = Path(__file__).parent / "synthetic"
