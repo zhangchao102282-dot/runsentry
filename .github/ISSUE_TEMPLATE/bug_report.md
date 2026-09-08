@@ -10,7 +10,7 @@ assignees: ""
 
 - OS:
 - Python version:
-- RunSentry version or commit:
+- RunSentry version/tag or commit:
 
 ## Command
 
@@ -36,3 +36,5 @@ Remove secrets, private paths, and sensitive argv values before sharing.
 
 - Did the wrapped command complete, fail, or keep running?
 - Did RunSentry report `SUSPECTED_STALL`, `QUIET`, `FAILED`, or `COMPLETE` unexpectedly?
+- Did stdout/stderr contain secrets or private data that should not be pasted into the issue?
+- Can the workload be reproduced with a small synthetic script?

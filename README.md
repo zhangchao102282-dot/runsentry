@@ -10,6 +10,10 @@ running without repeatedly checking whether it is still doing useful work.
 RunSentry is observer-first, local-first, non-invasive, and conservative. It does not
 automatically kill, restart, recover, schedule, or modify workloads.
 
+It is for developers, researchers, and local AI/agent users who run commands that may
+stay active for minutes or hours and want factual evidence that the command is still
+alive, active, quiet, completed, or failed.
+
 ## Public alpha status
 
 RunSentry is in conservative public alpha. The P0 scope is useful for local observation
@@ -112,6 +116,9 @@ Telemetry is local. RunSentry does not upload data or contact a service.
 RunSentry stores stdout/stderr activity counters, not stdout/stderr content. Command argv
 is stored because it is part of the factual launch record, so avoid putting secrets in
 command arguments.
+
+Generated `.runsentry/` artifacts are ignored by this repository and should normally
+stay out of commits.
 
 ## Health states
 
