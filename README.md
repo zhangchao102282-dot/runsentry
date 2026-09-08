@@ -170,6 +170,11 @@ Use the GitHub issue templates. For behavior bugs, include:
 
 Do not share command arguments or paths that contain secrets.
 
+## Feedback wanted
+
+If you try RunSentry on a real local command, feedback on install friction, health-state
+accuracy, `summary.json` usefulness, and missing P0 facts is especially useful.
+
 ## License
 
 MIT.
