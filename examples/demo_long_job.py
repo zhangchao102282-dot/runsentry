@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import sys
 import time
 from pathlib import Path
 
@@ -12,7 +11,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--output",
-        default="/tmp/runsentry-demo-output.txt",
+        default="/tmp/rs-demo.txt",
         help="file to update while the demo runs",
     )
     return parser.parse_args()
@@ -26,7 +25,6 @@ def main() -> int:
 
     print("demo: starting deterministic long job", flush=True)
     print(f"demo: writing watched file at {output_path}", flush=True)
-    print("demo: stderr is preserved too", file=sys.stderr, flush=True)
 
     for step in range(1, 7):
         checksum = sum(index * step for index in range(2500))

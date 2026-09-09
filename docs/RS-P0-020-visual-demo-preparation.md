@@ -17,7 +17,7 @@ Public demo command, from a checkout of this repository after `pip install runse
 ```bash
 runsentry run \
   --name demo \
-  --watch /tmp/runsentry-demo-output.txt \
+  --watch /tmp/rs-demo.txt \
   -- python examples/demo_long_job.py
 ```
 
@@ -29,9 +29,9 @@ repo checkout for this exact demo command.
 - Script: `examples/demo_long_job.py`
 - Expected duration: about 12 seconds.
 - Child stdout: visible deterministic progress lines.
-- Child stderr: one visible deterministic line.
-- Watched file: `/tmp/runsentry-demo-output.txt`, rewritten at start and appended during
-  each step.
+- Child stderr: not shown in this visual demo. Existing automated tests remain the
+  stderr passthrough evidence.
+- Watched file: `/tmp/rs-demo.txt`, rewritten at start and appended during each step.
 - Expected exit code: 0.
 - Expected final health: `COMPLETE`.
 - Network or external service: none.
@@ -47,12 +47,11 @@ bash examples/demo_terminal_flow.sh
 
 The script shows:
 
-1. `pip install runsentry` as the public install command.
-2. Current installed package metadata through `pip show runsentry`.
-3. The RunSentry demo command launch.
-4. Original child stdout/stderr in the terminal.
-5. Local artifact paths under `/tmp/runsentry-demo-artifacts` by default.
-6. A compact final summary containing `final_health_state` and `exit_code`.
+1. A quick installed-version check with `runsentry --version`.
+2. The RunSentry demo command launch.
+3. Original child stdout in the terminal.
+4. Local artifact paths under `/tmp/rs-demo` by default.
+5. A compact final summary containing `final_health_state` and `exit_code`.
 
 It intentionally avoids dumping full JSON.
 
@@ -79,14 +78,12 @@ preferred later, asciinema is the smallest specialized option to try first.
 Example terminal interaction, abridged and illustrative:
 
 ```text
-$ pip install runsentry
-Name: runsentry
-Version: 0.1.0a1
+$ runsentry --version
+runsentry 0.1.0a1
 
-$ runsentry run --name demo --watch /tmp/runsentry-demo-output.txt -- python examples/demo_long_job.py
+$ runsentry run --name demo --watch /tmp/rs-demo.txt --output-dir /tmp/rs-demo -- python examples/demo_long_job.py --output /tmp/rs-demo.txt
 demo: starting deterministic long job
-demo: writing watched file at /tmp/runsentry-demo-output.txt
-demo: stderr is preserved too
+demo: writing watched file at /tmp/rs-demo.txt
 demo: step 1/6 complete
 demo: step 2/6 complete
 demo: step 3/6 complete
@@ -96,8 +93,8 @@ demo: step 6/6 complete
 demo: complete
 
 RunSentry artifacts:
-  telemetry.jsonl: /tmp/runsentry-demo-artifacts/runs/<run_id>/telemetry.jsonl
-  summary.json: /tmp/runsentry-demo-artifacts/runs/<run_id>/summary.json
+  telemetry.jsonl: /tmp/rs-demo/runs/<run_id>/telemetry.jsonl
+  summary.json: /tmp/rs-demo/runs/<run_id>/summary.json
   final_health_state: COMPLETE
   exit_code: 0
 ```
@@ -117,10 +114,9 @@ image link.
 - `.venv/bin/python -m pytest -q`: PASS, 106 passed, 3 skipped.
 - `.venv/bin/runsentry --help`: PASS.
 - `.venv/bin/runsentry run --help`: PASS.
-- `PYTHON=.venv/bin/python RUNSENTRY=.venv/bin/runsentry bash examples/demo_terminal_flow.sh`:
-  PASS.
+- `bash examples/demo_terminal_flow.sh`: PASS.
 - Child stdout visible: PASS.
-- Child stderr visible: PASS.
+- Child stderr visible in this visual demo: not applicable.
 - `telemetry.jsonl` exists: PASS.
 - `summary.json` exists: PASS.
 - Final health: `COMPLETE`.
@@ -132,8 +128,8 @@ image link.
 
 Validated artifact paths:
 
-- `/tmp/runsentry-demo-artifacts/runs/20260909T143819Z-169d901e592f/telemetry.jsonl`
-- `/tmp/runsentry-demo-artifacts/runs/20260909T143819Z-169d901e592f/summary.json`
+- `/tmp/rs-demo/runs/20260909T204008Z-2c14d2267224/telemetry.jsonl`
+- `/tmp/rs-demo/runs/20260909T204008Z-2c14d2267224/summary.json`
 
 ## Remaining Manual Recording Steps
 

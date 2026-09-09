@@ -4,8 +4,16 @@ set -euo pipefail
 PYTHON_BIN="${PYTHON:-python3}"
 RUNSENTRY_BIN="${RUNSENTRY:-runsentry}"
 TMP_ROOT="${RUNSENTRY_DEMO_TMP:-/tmp}"
-WATCH_PATH="${TMP_ROOT%/}/runsentry-demo-output.txt"
-ARTIFACT_DIR="${TMP_ROOT%/}/runsentry-demo-artifacts"
+WATCH_PATH="${TMP_ROOT%/}/rs-demo.txt"
+ARTIFACT_DIR="${TMP_ROOT%/}/rs-demo"
+
+if [[ "${PYTHON:-}" == "" && -x ".venv/bin/python" ]]; then
+  PYTHON_BIN=".venv/bin/python"
+fi
+
+if [[ "${RUNSENTRY:-}" == "" ]] && ! command -v "$RUNSENTRY_BIN" >/dev/null 2>&1 && [[ -x ".venv/bin/runsentry" ]]; then
+  RUNSENTRY_BIN=".venv/bin/runsentry"
+fi
 
 "$PYTHON_BIN" - "$WATCH_PATH" "$ARTIFACT_DIR" <<'PY'
 import shutil
@@ -18,11 +26,11 @@ watch_path.unlink(missing_ok=True)
 shutil.rmtree(artifact_dir, ignore_errors=True)
 PY
 
-printf '$ pip install runsentry\n'
-"$PYTHON_BIN" -m pip show runsentry | sed -n '1,4p'
+printf '$ runsentry --version\n'
+"$RUNSENTRY_BIN" --version
 printf '\n'
 
-printf '$ runsentry run --name demo --watch /tmp/runsentry-demo-output.txt -- python examples/demo_long_job.py\n'
+printf '$ runsentry run --name demo --watch /tmp/rs-demo.txt --output-dir /tmp/rs-demo -- python examples/demo_long_job.py --output /tmp/rs-demo.txt\n'
 "$RUNSENTRY_BIN" run \
   --name demo \
   --watch "$WATCH_PATH" \

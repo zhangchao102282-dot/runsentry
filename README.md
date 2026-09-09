@@ -51,7 +51,7 @@ It requires this repository checkout because the example script lives under
 ```bash
 runsentry run \
   --name demo \
-  --watch /tmp/runsentry-demo-output.txt \
+  --watch /tmp/rs-demo.txt \
   -- python examples/demo_long_job.py
 ```
 
