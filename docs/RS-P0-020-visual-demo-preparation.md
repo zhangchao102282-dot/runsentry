@@ -2,6 +2,12 @@
 
 Date: 2026-09-09
 
+RS-P0-020B update: the recording flow now invokes the child demo as `python -u
+examples/demo_long_job.py` while the demo script flushes each visible progress line. The
+demo script also emits non-visible pipe padding when stdout is not a TTY, and
+`examples/demo_terminal_flow.sh` strips that padding before display. This keeps recorded
+progress visually incremental when RunSentry observes the child through pipes.
+
 ## Objective
 
 Prepare a short, honest terminal demo that helps a first-time visitor understand
@@ -81,7 +87,7 @@ Example terminal interaction, abridged and illustrative:
 $ runsentry --version
 runsentry 0.1.0a1
 
-$ runsentry run --name demo --watch /tmp/rs-demo.txt --output-dir /tmp/rs-demo -- python examples/demo_long_job.py --output /tmp/rs-demo.txt
+$ runsentry run --name demo --watch /tmp/rs-demo.txt --output-dir /tmp/rs-demo -- python -u examples/demo_long_job.py --output /tmp/rs-demo.txt
 demo: starting deterministic long job
 demo: writing watched file at /tmp/rs-demo.txt
 demo: step 1/6 complete
@@ -128,8 +134,8 @@ image link.
 
 Validated artifact paths:
 
-- `/tmp/rs-demo/runs/20260909T204008Z-2c14d2267224/telemetry.jsonl`
-- `/tmp/rs-demo/runs/20260909T204008Z-2c14d2267224/summary.json`
+- `/tmp/rs-demo/runs/20260909T211105Z-d835f9d7a0c3/telemetry.jsonl`
+- `/tmp/rs-demo/runs/20260909T211105Z-d835f9d7a0c3/summary.json`
 
 ## Remaining Manual Recording Steps
 
