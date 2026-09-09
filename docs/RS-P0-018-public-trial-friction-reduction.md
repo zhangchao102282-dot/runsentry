@@ -2,6 +2,10 @@
 
 Date: 2026-09-09
 
+Later update from RS-P0-019A: PyPI publication subsequently succeeded for package
+`runsentry`, version `0.1.0a1`. The RS-P0-018 notes below preserve the pre-publication
+state that was true during that task.
+
 ## Diagnosis
 
 The public alpha has a working local observer, green CI, a published GitHub release, and
@@ -187,3 +191,6 @@ ready to record, but no GIF/video was produced in this task.
 Next step: manually publish the verified package to PyPI when ready, then update the
 README installation section from "future/planned" to actual PyPI install instructions
 and record the short terminal demo.
+
+RS-P0-019A update: this manual PyPI publication step is complete. The remaining next
+step is the visual terminal demo recording.

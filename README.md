@@ -5,7 +5,7 @@ A lightweight local observer for long-running commands.
 Wrap any command without modifying it:
 
 ```bash
-runsentry run --name training -- python train.py
+runsentry run --name demo -- python my_script.py
 ```
 
 RunSentry records:
@@ -23,6 +23,26 @@ No automatic killing.
 
 It is for developers, researchers, and local AI/agent users who want factual evidence
 about commands that may stay active for minutes or hours.
+
+## Install
+
+RunSentry targets Python 3.10+ on macOS and Linux.
+
+```bash
+pip install runsentry
+```
+
+PyPI package: <https://pypi.org/project/runsentry/>
+
+GitHub release `v0.1.0-alpha.1` is published to PyPI as version `0.1.0a1`.
+
+## Quick start
+
+```bash
+runsentry run --name demo -- python my_script.py
+```
+
+Demo command:
 
 ```bash
 runsentry run \
@@ -60,11 +80,7 @@ RunSentry P0 can:
 `SUSPECTED_STALL` is a conservative suspicion, not proof. Silence alone is not a stall.
 No watch path is not stall evidence. Unavailable metrics reduce confidence.
 
-## Install from source
-
-RunSentry currently targets Python 3.10+ on macOS and Linux.
-
-Current source installation:
+## Source and development installation
 
 ```bash
 python -m pip install -e .
@@ -76,9 +92,6 @@ For development tests:
 python -m pip install -e ".[test]"
 python -m pytest -q
 ```
-
-Future PyPI installation is planned, but the package has not been published to PyPI yet.
-Until that happens, source installation is required.
 
 ## Basic usage
 
