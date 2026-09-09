@@ -7,8 +7,8 @@ Current package:
 
 - PyPI package: `runsentry`
 - PyPI page: <https://pypi.org/project/runsentry/>
-- GitHub release: `v0.1.0-alpha.1`
-- PyPI version: `0.1.0a1`
+- GitHub release plan: `v0.1.0-alpha.2`
+- Prepared PyPI version: `0.1.0a2`
 
 Install:
 

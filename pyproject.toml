@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "runsentry"
-version = "0.1.0a1"
+version = "0.1.0a2"
 description = "A lightweight local health observer for long-running commands and Python jobs."
 readme = "README.md"
 requires-python = ">=3.10"

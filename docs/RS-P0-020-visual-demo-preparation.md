@@ -83,7 +83,7 @@ Example terminal interaction, abridged and illustrative:
 
 ```text
 $ runsentry --version
-runsentry 0.1.0a1
+runsentry 0.1.0a2
 
 $ runsentry run --name demo --watch /tmp/rs-demo.txt --output-dir /tmp/rs-demo -- python -u examples/demo_long_job.py --output /tmp/rs-demo.txt
 demo: starting deterministic long job

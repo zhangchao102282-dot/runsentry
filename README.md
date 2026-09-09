@@ -34,7 +34,9 @@ pip install runsentry
 
 PyPI package: <https://pypi.org/project/runsentry/>
 
-GitHub release `v0.1.0-alpha.1` is published to PyPI as version `0.1.0a1`.
+Prepared PyPI version: `0.1.0a2`.
+
+Latest GitHub release plan: `v0.1.0-alpha.2`.
 
 ## Quick start
 
