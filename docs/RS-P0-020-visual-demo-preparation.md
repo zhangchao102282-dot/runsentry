@@ -2,11 +2,9 @@
 
 Date: 2026-09-09
 
-RS-P0-020B update: the recording flow now invokes the child demo as `python -u
-examples/demo_long_job.py` while the demo script flushes each visible progress line. The
-demo script also emits non-visible pipe padding when stdout is not a TTY, and
-`examples/demo_terminal_flow.sh` strips that padding before display. This keeps recorded
-progress visually incremental when RunSentry observes the child through pipes.
+RS-P0-020C update: a runtime output tee latency repair removed the need for demo-only
+pipe padding. The recording flow still invokes the child demo as `python -u
+examples/demo_long_job.py`, and the demo script flushes each visible progress line.
 
 ## Objective
 

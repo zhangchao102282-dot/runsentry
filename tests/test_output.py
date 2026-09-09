@@ -124,6 +124,38 @@ def test_partial_chunked_output_updates_activity() -> None:
     assert result.stdout_activity.last_activity_monotonic_s is not None
 
 
+def test_small_flushed_stdout_is_forwarded_before_child_exit() -> None:
+    script = (
+        "import sys, time\n"
+        "print('RS_P0_020C_FIRST', flush=True)\n"
+        "time.sleep(1.5)\n"
+        "print('RS_P0_020C_SECOND', flush=True)\n"
+    )
+    process = subprocess.Popen(
+        [sys.executable, "-m", "runsentry", "run", "--", sys.executable, "-u", "-c", script],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    start_s = time.monotonic()
+    try:
+        assert process.stdout is not None
+        first_line = process.stdout.readline()
+        elapsed_s = time.monotonic() - start_s
+        assert first_line == "RS_P0_020C_FIRST\n"
+        assert elapsed_s < 1.0
+        assert process.poll() is None
+        stdout_tail, stderr = process.communicate(timeout=5)
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            process.wait(timeout=5)
+
+    assert process.returncode == 0
+    assert stdout_tail == "RS_P0_020C_SECOND\n"
+    assert stderr == ""
+
+
 def test_binary_non_utf8_output_is_forwarded_unchanged() -> None:
     expected = bytes([0xFF, 0xFE, 0x00, 0x80, 0x41])
     result = subprocess.run(

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import io
+import os
 import sys
 import threading
 import time
@@ -110,7 +112,7 @@ class StreamDrainer:
     def _run(self) -> None:
         try:
             while True:
-                chunk = self.source.read(READ_CHUNK_SIZE)
+                chunk = self._read_chunk()
                 if not chunk:
                     self.activity.record_eof()
                     return
@@ -120,6 +122,13 @@ class StreamDrainer:
                     self._write_chunk(chunk)
         except BaseException as exc:
             self.activity.record_read_error(exc)
+
+    def _read_chunk(self) -> bytes:
+        try:
+            fd = self.source.fileno()
+        except (AttributeError, io.UnsupportedOperation):
+            return self.source.read(READ_CHUNK_SIZE)
+        return os.read(fd, READ_CHUNK_SIZE)
 
     def _write_chunk(self, chunk: bytes) -> None:
         try:

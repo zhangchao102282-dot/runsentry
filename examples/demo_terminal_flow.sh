@@ -15,17 +15,6 @@ if [[ "${RUNSENTRY:-}" == "" ]] && ! command -v "$RUNSENTRY_BIN" >/dev/null 2>&1
   RUNSENTRY_BIN=".venv/bin/runsentry"
 fi
 
-strip_demo_padding() {
-  "$PYTHON_BIN" -c 'import sys
-while True:
-    chunk = sys.stdin.buffer.read1(8192)
-    if not chunk:
-        break
-    sys.stdout.buffer.write(chunk.replace(b"\0", b""))
-    sys.stdout.buffer.flush()
-'
-}
-
 "$PYTHON_BIN" - "$WATCH_PATH" "$ARTIFACT_DIR" <<'PY'
 import shutil
 import sys
@@ -46,8 +35,7 @@ printf '$ runsentry run --name demo --watch /tmp/rs-demo.txt --output-dir /tmp/r
   --name demo \
   --watch "$WATCH_PATH" \
   --output-dir "$ARTIFACT_DIR" \
-  -- "$PYTHON_BIN" -u examples/demo_long_job.py --output "$WATCH_PATH" \
-  | strip_demo_padding
+  -- "$PYTHON_BIN" -u examples/demo_long_job.py --output "$WATCH_PATH"
 printf '\n'
 
 SUMMARY_PATH="$(find "$ARTIFACT_DIR/runs" -name summary.json | sort | tail -n 1)"
