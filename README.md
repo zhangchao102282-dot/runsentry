@@ -1,18 +1,35 @@
 # RunSentry
 
-RunSentry is a lightweight local health observer for long-running commands and Python
-jobs.
+A lightweight local observer for long-running commands.
 
-It wraps one command, observes factual activity, writes local telemetry, and reports a
-conservative health state. It is designed for cases where you want to leave a command
-running without repeatedly checking whether it is still doing useful work.
+Wrap any command without modifying it:
 
-RunSentry is observer-first, local-first, non-invasive, and conservative. It does not
-automatically kill, restart, recover, schedule, or modify workloads.
+```bash
+runsentry run --name training -- python train.py
+```
 
-It is for developers, researchers, and local AI/agent users who run commands that may
-stay active for minutes or hours and want factual evidence that the command is still
-alive, active, quiet, completed, or failed.
+RunSentry records:
+
+- process/resource activity;
+- stdout/stderr activity;
+- watched file/directory changes;
+- conservative health state;
+- local JSONL telemetry;
+- final `summary.json`.
+
+No daemon.
+No cloud.
+No automatic killing.
+
+It is for developers, researchers, and local AI/agent users who want factual evidence
+about commands that may stay active for minutes or hours.
+
+```bash
+runsentry run \
+  --name demo \
+  --watch /tmp/runsentry-demo-output.txt \
+  -- python examples/demo_long_job.py
+```
 
 ## Public alpha status
 
@@ -47,6 +64,8 @@ No watch path is not stall evidence. Unavailable metrics reduce confidence.
 
 RunSentry currently targets Python 3.10+ on macOS and Linux.
 
+Current source installation:
+
 ```bash
 python -m pip install -e .
 ```
@@ -57,6 +76,9 @@ For development tests:
 python -m pip install -e ".[test]"
 python -m pytest -q
 ```
+
+Future PyPI installation is planned, but the package has not been published to PyPI yet.
+Until that happens, source installation is required.
 
 ## Basic usage
 
