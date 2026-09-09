@@ -42,7 +42,11 @@ GitHub release `v0.1.0-alpha.1` is published to PyPI as version `0.1.0a1`.
 runsentry run --name demo -- python my_script.py
 ```
 
-Demo command:
+## Demo
+
+The repository includes a deterministic terminal demo that runs for about 12 seconds.
+It requires this repository checkout because the example script lives under
+`examples/`.
 
 ```bash
 runsentry run \
@@ -50,6 +54,14 @@ runsentry run \
   --watch /tmp/runsentry-demo-output.txt \
   -- python examples/demo_long_job.py
 ```
+
+To record a short terminal demo later, use:
+
+```bash
+bash examples/demo_terminal_flow.sh
+```
+
+<!-- Insert recorded terminal GIF/video here after it exists. Do not commit a broken image link. -->
 
 ## Public alpha status
 
