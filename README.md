@@ -2,10 +2,40 @@
 
 A lightweight local observer for long-running commands.
 
+## Install
+
+RunSentry targets Python 3.10+ on macOS and Linux.
+
+```bash
+pip install runsentry
+```
+
+PyPI package: <https://pypi.org/project/runsentry/>
+
+Current PyPI version: `0.1.0a2`.
+
+Latest GitHub release: `v0.1.0-alpha.2`.
+
+## Quick start
+
 Wrap any command without modifying it:
 
 ```bash
 runsentry run --name demo -- python my_script.py
+```
+
+## Demo
+
+![RunSentry terminal demo](docs/assets/runsentry_demo_readme.gif)
+
+The repository also includes the deterministic demo script used for the recording. It
+requires this repository checkout because the example script lives under `examples/`.
+
+```bash
+runsentry run \
+  --name demo \
+  --watch /tmp/rs-demo.txt \
+  -- python examples/demo_long_job.py
 ```
 
 RunSentry records:
@@ -24,46 +54,11 @@ No automatic killing.
 It is for developers, researchers, and local AI/agent users who want factual evidence
 about commands that may stay active for minutes or hours.
 
-## Install
-
-RunSentry targets Python 3.10+ on macOS and Linux.
-
-```bash
-pip install runsentry
-```
-
-PyPI package: <https://pypi.org/project/runsentry/>
-
-Prepared PyPI version: `0.1.0a2`.
-
-Latest GitHub release plan: `v0.1.0-alpha.2`.
-
-## Quick start
-
-```bash
-runsentry run --name demo -- python my_script.py
-```
-
-## Demo
-
-The repository includes a deterministic terminal demo that runs for about 12 seconds.
-It requires this repository checkout because the example script lives under
-`examples/`.
-
-```bash
-runsentry run \
-  --name demo \
-  --watch /tmp/rs-demo.txt \
-  -- python examples/demo_long_job.py
-```
-
-To record a short terminal demo later, use:
+To reproduce the terminal demo locally, use:
 
 ```bash
 bash examples/demo_terminal_flow.sh
 ```
-
-<!-- Insert recorded terminal GIF/video here after it exists. Do not commit a broken image link. -->
 
 ## Public alpha status
 
